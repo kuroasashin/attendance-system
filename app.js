@@ -354,5 +354,67 @@ async function loadAdminUsers() {
     } catch (error) {
         console.error("Error loading admin users:", error);
         document.getElementById('adminUsersContent').innerHTML = '<div class="error">Error loading data</div>';
+      
+  async function signInWithGoogle(role) {
+    try {
+        const result = await auth.signInWithPopup(googleProvider);
+        const user = result.user;
+        
+        // Check if user exists in our database
+        const userDoc = await db.collection('users').where('email', '==', user.email).get();
+        
+        if (userDoc.empty) {
+            // New user - register them
+            if (role === 'trainee') {
+                // For trainees, go to registration form
+                document.getElementById('regEmail').value = user.email;
+                document.getElementById('regName').value = user.displayName || '';
+                document.getElementById('rolePopup').style.display = 'none';
+                document.getElementById('registrationPopup').style.display = 'flex';
+                
+                // Store user info for registration
+                window.currentUser = { email: user.email, displayName: user.displayName };
+            } else {
+                // For instructors, check if they have access
+                // Show OTP popup for verification
+                document.getElementById('otpEmail').value = user.email;
+                document.getElementById('rolePopup').style.display = 'none';
+                document.getElementById('otpPopup').style.display = 'flex';
+                
+                // Store user info for verification
+                window.currentUser = { email: user.email, displayName: user.displayName };
+            }
+        } else {
+            // Existing user - check their role and redirect accordingly
+            const userData = userDoc.docs[0].data();
+            
+            if (role === 'trainee' && userData.role === 'trainee') {
+                // Trainee accessing trainee dashboard
+                currentUserRole = 'Trainee';
+                userData.email = user.email;
+                userData.displayName = user.displayName;
+                document.getElementById('userRoleDisplay').textContent = 'Trainee';
+                document.getElementById('mainContainer').style.display = 'block';
+                document.getElementById('rolePopup').style.display = 'none';
+            } else if (role === 'instructor' && userData.role === 'instructor') {
+                // Instructor accessing admin dashboard
+                currentUserRole = 'Instructor';
+                document.getElementById('adminContainer').style.display = 'block';
+                document.getElementById('rolePopup').style.display = 'none';
+            } else {
+                alert("Access denied. You don't have permission to access this role.");
+            }
+        }
+    } catch (error) {
+        console.error("Error signing in with Google:", error);
+        if (error.code === 'auth/popup-blocked') {
+            alert("Pop-up was blocked. Please allow pop-ups for this site and try again.");
+        } else if (error.code === 'auth/cancelled-popup-request') {
+            // This happens when user closes the popup - ignore silently
+        } else {
+            alert("Error signing in with Google. Please try again.\n\nError: " + error.message);
+        }
+    }
+}
     }
 }
