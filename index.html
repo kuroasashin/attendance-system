@@ -57,6 +57,15 @@
             border-radius: 10px;
             box-shadow: 0 0 20px rgba(0,0,0,0.1);
         }
+        .admin-container {
+            display: none;
+            max-width: 1200px;
+            width: 90%;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
         .header {
             text-align: center;
             margin-bottom: 30px;
@@ -115,7 +124,7 @@
         #loginForm {
             margin-bottom: 20px;
         }
-        input[type="text"], input[type="password"] {
+        input[type="text"], input[type="password"], input[type="email"] {
             width: 100%;
             padding: 12px;
             margin: 10px 0;
@@ -164,8 +173,30 @@
     <div class="popup" id="rolePopup">
         <div class="popup-content">
             <h2>Select Your Role</h2>
-            <button class="role-btn trainee" onclick="selectRole('Trainee')">Trainee</button>
-            <button class="role-btn instructor" onclick="selectRole('Instructor')">Instructor</button>
+            <button class="role-btn trainee" onclick="handleTraineeClick()">Trainee</button>
+            <button class="role-btn instructor" onclick="handleInstructorClick()">Instructor</button>
+        </div>
+    </div>
+
+    <!-- Registration Popup -->
+    <div class="popup" id="registrationPopup" style="display: none;">
+        <div class="popup-content">
+            <h2>Register as Trainee</h2>
+            <input type="email" id="regEmail" placeholder="Enter your email" required>
+            <input type="text" id="regName" placeholder="Enter your name" required>
+            <button onclick="registerUser()" class="login-btn" style="margin-top: 10px;">Register</button>
+            <button onclick="closeRegistrationPopup()" style="margin-top: 10px; background-color: #ccc;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- OTP Popup -->
+    <div class="popup" id="otpPopup" style="display: none;">
+        <div class="popup-content">
+            <h2>Instructor Access</h2>
+            <input type="email" id="otpEmail" placeholder="Enter your email" required>
+            <input type="password" id="otpInput" placeholder="Enter OTP (1234)" required>
+            <button onclick="verifyInstructor()" class="login-btn" style="margin-top: 10px;">Access Admin</button>
+            <button onclick="closeOtpPopup()" style="margin-top: 10px; background-color: #ccc;">Cancel</button>
         </div>
     </div>
 
@@ -210,6 +241,37 @@
         </div>
     </div>
 
+    <!-- Admin Dashboard Container -->
+    <div class="admin-container" id="adminContainer">
+        <div class="header">
+            <h1>Admin Dashboard</h1>
+            <p>Welcome, Instructor</p>
+        </div>
+        
+        <div id="adminStatusMessage" class="status" style="display: none;"></div>
+        
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="switchAdminTab('admin-overview')">Attendance Overview</button>
+                <button class="tab-btn" onclick="switchAdminTab('admin-users')">Manage Users</button>
+            </div>
+            
+            <div id="adminOverviewTab" class="tab-content active">
+                <h2>All Attendance Records</h2>
+                <div id="adminOverviewContent">
+                    <div class="loading">Loading attendance data...</div>
+                </div>
+            </div>
+            
+            <div id="adminUsersTab" class="tab-content">
+                <h2>Registered Users</h2>
+                <div id="adminUsersContent">
+                    <div class="loading">Loading users...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
@@ -234,12 +296,128 @@
 
         let currentUserRole = '';
         let attendanceData = [];
+        let userData = {};
 
-        function selectRole(role) {
-            currentUserRole = role;
+        async function handleTraineeClick() {
             document.getElementById('rolePopup').style.display = 'none';
-            document.getElementById('mainContainer').style.display = 'block';
-            document.getElementById('userRoleDisplay').textContent = role;
+            
+            // Check if user exists in database
+            const email = prompt("Please enter your email:");
+            if (!email) return;
+            
+            try {
+                const userDoc = await db.collection('users').where('email', '==', email).get();
+                if (!userDoc.empty) {
+                    // User exists - go to main page
+                    userData = userDoc.docs[0].data();
+                    currentUserRole = 'Trainee';
+                    document.getElementById('userRoleDisplay').textContent = 'Trainee';
+                    document.getElementById('mainContainer').style.display = 'block';
+                } else {
+                    // User doesn't exist - show registration popup
+                    document.getElementById('regEmail').value = email;
+                    document.getElementById('registrationPopup').style.display = 'flex';
+                }
+            } catch (error) {
+                console.error("Error checking user:", error);
+                alert("Error checking user. Please try again.");
+            }
+        }
+
+        async function handleInstructorClick() {
+            document.getElementById('rolePopup').style.display = 'none';
+            
+            // Check if user exists in database
+            const email = prompt("Please enter your email:");
+            if (!email) return;
+            
+            try {
+                const userDoc = await db.collection('users').where('email', '==', email).get();
+                if (!userDoc.empty) {
+                    // User exists - verify as instructor and go to admin dashboard
+                    const userData = userDoc.docs[0].data();
+                    if (userData.role === 'instructor') {
+                        currentUserRole = 'Instructor';
+                        document.getElementById('adminContainer').style.display = 'block';
+                    } else {
+                        alert("You don't have instructor access!");
+                    }
+                } else {
+                    // User doesn't exist - show OTP popup
+                    document.getElementById('otpEmail').value = email;
+                    document.getElementById('otpPopup').style.display = 'flex';
+                }
+            } catch (error) {
+                console.error("Error checking user:", error);
+                alert("Error checking user. Please try again.");
+            }
+        }
+
+        async function registerUser() {
+            const email = document.getElementById('regEmail').value;
+            const name = document.getElementById('regName').value;
+            
+            if (!email || !name) {
+                alert("Please fill in all fields");
+                return;
+            }
+            
+            try {
+                await db.collection('users').add({
+                    email: email,
+                    name: name,
+                    role: 'trainee',
+                    registeredAt: new Date()
+                });
+                
+                alert("Registration successful!");
+                closeRegistrationPopup();
+                userData = { email: email, name: name };
+                currentUserRole = 'Trainee';
+                document.getElementById('userRoleDisplay').textContent = 'Trainee';
+                document.getElementById('mainContainer').style.display = 'block';
+            } catch (error) {
+                console.error("Error registering user:", error);
+                alert("Error registering user. Please try again.");
+            }
+        }
+
+        async function verifyInstructor() {
+            const email = document.getElementById('otpEmail').value;
+            const otp = document.getElementById('otpInput').value;
+            
+            if (otp !== '1234') {
+                alert("Invalid OTP. Please try again.");
+                return;
+            }
+            
+            try {
+                // Register user as instructor
+                await db.collection('users').add({
+                    email: email,
+                    name: "Instructor",
+                    role: 'instructor',
+                    registeredAt: new Date()
+                });
+                
+                alert("Access granted to admin dashboard!");
+                closeOtpPopup();
+                currentUserRole = 'Instructor';
+                document.getElementById('adminContainer').style.display = 'block';
+            } catch (error) {
+                console.error("Error verifying instructor:", error);
+                alert("Error verifying instructor. Please try again.");
+            }
+        }
+
+        function closeRegistrationPopup() {
+            document.getElementById('registrationPopup').style.display = 'none';
+            document.getElementById('rolePopup').style.display = 'flex';
+        }
+
+        function closeOtpPopup() {
+            document.getElementById('otpPopup').style.display = 'none';
+            document.getElementById('rolePopup').style.display = 'flex';
         }
 
         // Handle login form submission
@@ -256,7 +434,8 @@
         function recordAttendance(status) {
             const timestamp = new Date();
             const attendanceData = {
-                user: document.querySelector('#loginForm input[type="text"]').value,
+                user: userData.name || document.querySelector('#loginForm input[type="text"]').value,
+                email: userData.email,
                 role: currentUserRole,
                 status: status,
                 timestamp: timestamp,
@@ -368,6 +547,89 @@
 
             tableHTML += '</tbody></table>';
             document.getElementById('overviewContent').innerHTML = tableHTML;
+        }
+
+        // Admin functions
+        function switchAdminTab(tabName) {
+            // Hide all admin tab contents
+            document.querySelectorAll('#adminContainer .tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all admin buttons
+            document.querySelectorAll('#adminContainer .tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(`${tabName}Tab`).classList.add('active');
+            
+            // Add active class to selected button
+            event.target.classList.add('active');
+            
+            // Load data based on selected tab
+            if (tabName === 'admin-overview') {
+                loadAdminOverview();
+            } else if (tabName === 'admin-users') {
+                loadAdminUsers();
+            }
+        }
+
+        async function loadAdminOverview() {
+            try {
+                const snapshot = await db.collection('attendance')
+                    .orderBy('timestamp', 'desc')
+                    .get();
+                
+                let tableHTML = '<table><thead><tr><th>User</th><th>Email</th><th>Status</th><th>Date</th><th>Time</th></tr></thead><tbody>';
+                
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const timestamp = data.timestamp ? data.timestamp.toDate() : new Date();
+                    tableHTML += `
+                        <tr>
+                            <td>${data.user || 'N/A'}</td>
+                            <td>${data.email || 'N/A'}</td>
+                            <td>${data.status}</td>
+                            <td>${data.date}</td>
+                            <td>${timestamp.toLocaleTimeString()}</td>
+                        </tr>
+                    `;
+                });
+                
+                tableHTML += '</tbody></table>';
+                document.getElementById('adminOverviewContent').innerHTML = tableHTML;
+            } catch (error) {
+                console.error("Error loading admin overview:", error);
+                document.getElementById('adminOverviewContent').innerHTML = '<div class="error">Error loading data</div>';
+            }
+        }
+
+        async function loadAdminUsers() {
+            try {
+                const snapshot = await db.collection('users').get();
+                
+                let tableHTML = '<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Registered At</th></tr></thead><tbody>';
+                
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const registeredAt = data.registeredAt ? data.registeredAt.toDate().toLocaleString() : 'N/A';
+                    tableHTML += `
+                        <tr>
+                            <td>${data.name || 'N/A'}</td>
+                            <td>${data.email}</td>
+                            <td>${data.role}</td>
+                            <td>${registeredAt}</td>
+                        </tr>
+                    `;
+                });
+                
+                tableHTML += '</tbody></table>';
+                document.getElementById('adminUsersContent').innerHTML = tableHTML;
+            } catch (error) {
+                console.error("Error loading admin users:", error);
+                document.getElementById('adminUsersContent').innerHTML = '<div class="error">Error loading data</div>';
+            }
         }
     </script>
 </body>
