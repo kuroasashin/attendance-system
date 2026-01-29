@@ -104,6 +104,14 @@
             border-radius: 4px;
             cursor: pointer;
         }
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
     </style>
 </head>
 <body>
@@ -123,6 +131,8 @@
             <p>Welcome, <span id="userRoleDisplay"></span></p>
         </div>
         
+        <div id="statusMessage" class="status" style="display: none;"></div>
+        
         <form id="loginForm">
             <input type="text" placeholder="Username" required>
             <input type="password" placeholder="Password" required>
@@ -130,20 +140,89 @@
         </form>
         
         <div class="btn-group">
-            <button class="present">Present</button>
-            <button class="rso">RSO</button>
-            <button class="rsi">RSI</button>
-            <button class="mc">MC</button>
-            <button class="late">Late</button>
-            <button class="leave">Leave</button>
+            <button class="present" onclick="recordAttendance('Present')">Present</button>
+            <button class="rso" onclick="recordAttendance('RSO')">RSO</button>
+            <button class="rsi" onclick="recordAttendance('RSI')">RSI</button>
+            <button class="mc" onclick="recordAttendance('MC')">MC</button>
+            <button class="late" onclick="recordAttendance('Late')">Late</button>
+            <button class="leave" onclick="recordAttendance('Leave')">Leave</button>
         </div>
     </div>
 
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    
     <script>
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+          apiKey: "AIzaSyAfFHn0mvqc84gL14vvqF3CUzw9yPl8CnQ",
+          authDomain: "attendance-eec.firebaseapp.com",
+          projectId: "attendance-eec",
+          storageBucket: "attendance-eec.firebasestorage.app",
+          messagingSenderId: "583669434269",
+          appId: "1:583669434269:web:075ba77466d0f3f753d174",
+          measurementId: "G-18Y4GS2QW9"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        let currentUserRole = '';
+
         function selectRole(role) {
+            currentUserRole = role;
             document.getElementById('rolePopup').style.display = 'none';
             document.getElementById('mainContainer').style.display = 'block';
             document.getElementById('userRoleDisplay').textContent = role;
+        }
+
+        // Handle login form submission
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const username = this.querySelector('input[type="text"]').value;
+            const password = this.querySelector('input[type="password"]').value;
+            
+            // In a real app, you would implement proper authentication
+            // For now, we'll just show a success message
+            showMessage('Login successful!', 'success');
+        });
+
+        function recordAttendance(status) {
+            const timestamp = new Date();
+            const attendanceData = {
+                user: document.querySelector('#loginForm input[type="text"]').value,
+                role: currentUserRole,
+                status: status,
+                timestamp: timestamp,
+                date: timestamp.toDateString()
+            };
+            
+            // Save to Firestore
+            db.collection('attendance')
+              .add(attendanceData)
+              .then((docRef) => {
+                  console.log("Document written with ID: ", docRef.id);
+                  showMessage(`Attendance recorded as ${status}!`, 'success');
+              })
+              .catch((error) => {
+                  console.error("Error adding document: ", error);
+                  showMessage('Error recording attendance!', 'error');
+              });
+        }
+
+        function showMessage(message, type) {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
         }
     </script>
 </body>
