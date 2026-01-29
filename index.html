@@ -50,7 +50,7 @@
         .instructor { background-color: #2196F3; }
         .container {
             display: none;
-            max-width: 600px;
+            max-width: 1200px;
             width: 90%;
             background-color: white;
             padding: 30px;
@@ -60,6 +60,34 @@
         .header {
             text-align: center;
             margin-bottom: 30px;
+        }
+        .tab-container {
+            margin-bottom: 20px;
+        }
+        .tab-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px 5px 0 0;
+            cursor: pointer;
+            background-color: #e0e0e0;
+        }
+        .tab-btn.active {
+            background-color: #333;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 0 5px 5px 5px;
+        }
+        .tab-content.active {
+            display: block;
         }
         .btn-group {
             display: grid;
@@ -112,6 +140,23 @@
         }
         .success { background-color: #d4edda; color: #155724; }
         .error { background-color: #f8d7da; color: #721c24; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
     </style>
 </head>
 <body>
@@ -133,19 +178,35 @@
         
         <div id="statusMessage" class="status" style="display: none;"></div>
         
-        <form id="loginForm">
-            <input type="text" placeholder="Username" required>
-            <input type="password" placeholder="Password" required>
-            <button type="submit" class="login-btn">Login</button>
-        </form>
-        
-        <div class="btn-group">
-            <button class="present" onclick="recordAttendance('Present')">Present</button>
-            <button class="rso" onclick="recordAttendance('RSO')">RSO</button>
-            <button class="rsi" onclick="recordAttendance('RSI')">RSI</button>
-            <button class="mc" onclick="recordAttendance('MC')">MC</button>
-            <button class="late" onclick="recordAttendance('Late')">Late</button>
-            <button class="leave" onclick="recordAttendance('Leave')">Leave</button>
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="switchTab('attendance')">Attendance</button>
+                <button class="tab-btn" onclick="switchTab('overview')">Monthly Overview</button>
+            </div>
+            
+            <div id="attendanceTab" class="tab-content active">
+                <form id="loginForm">
+                    <input type="text" placeholder="Username" required>
+                    <input type="password" placeholder="Password" required>
+                    <button type="submit" class="login-btn">Login</button>
+                </form>
+                
+                <div class="btn-group">
+                    <button class="present" onclick="recordAttendance('Present')">Present</button>
+                    <button class="rso" onclick="recordAttendance('RSO')">RSO</button>
+                    <button class="rsi" onclick="recordAttendance('RSI')">RSI</button>
+                    <button class="mc" onclick="recordAttendance('MC')">MC</button>
+                    <button class="late" onclick="recordAttendance('Late')">Late</button>
+                    <button class="leave" onclick="recordAttendance('Leave')">Leave</button>
+                </div>
+            </div>
+            
+            <div id="overviewTab" class="tab-content">
+                <h2>Monthly Attendance Overview</h2>
+                <div id="overviewContent">
+                    <div class="loading">Loading attendance data...</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -172,6 +233,7 @@
         const auth = firebase.auth();
 
         let currentUserRole = '';
+        let attendanceData = [];
 
         function selectRole(role) {
             currentUserRole = role;
@@ -223,6 +285,89 @@
             setTimeout(() => {
                 statusDiv.style.display = 'none';
             }, 3000);
+        }
+
+        function switchTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(`${tabName}Tab`).classList.add('active');
+            
+            // Add active class to selected button
+            event.target.classList.add('active');
+            
+            // Load overview data if switching to overview tab
+            if (tabName === 'overview') {
+                loadOverviewData();
+            }
+        }
+
+        async function loadOverviewData() {
+            try {
+                const snapshot = await db.collection('attendance')
+                    .orderBy('timestamp', 'asc')
+                    .get();
+                
+                attendanceData = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    attendanceData.push({
+                        id: doc.id,
+                        ...data
+                    });
+                });
+                
+                renderOverviewTable();
+            } catch (error) {
+                console.error("Error loading overview data: ", error);
+                document.getElementById('overviewContent').innerHTML = '<div class="error">Error loading data</div>';
+            }
+        }
+
+        function renderOverviewTable() {
+            if (attendanceData.length === 0) {
+                document.getElementById('overviewContent').innerHTML = '<div>No attendance records found.</div>';
+                return;
+            }
+
+            // Get unique users and dates
+            const users = [...new Set(attendanceData.map(item => item.user))];
+            const dates = [...new Set(attendanceData.map(item => item.date))].sort();
+
+            // Create table header
+            let tableHTML = '<table><thead><tr><th>Name</th>';
+            dates.forEach(date => {
+                tableHTML += `<th>${date}</th>`;
+            });
+            tableHTML += '</tr></thead><tbody>';
+
+            // Create table rows for each user
+            users.forEach(user => {
+                tableHTML += `<tr><td>${user}</td>`;
+                dates.forEach(date => {
+                    const record = attendanceData.find(item => 
+                        item.user === user && item.date === date
+                    );
+                    
+                    if (record) {
+                        tableHTML += `<td>${record.status}</td>`;
+                    } else {
+                        tableHTML += '<td>-</td>';
+                    }
+                });
+                tableHTML += '</tr>';
+            });
+
+            tableHTML += '</tbody></table>';
+            document.getElementById('overviewContent').innerHTML = tableHTML;
         }
     </script>
 </body>
