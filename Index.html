@@ -1,1 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance System</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <div id="app">
+        <div id="login-section">
+            <h2>Login</h2>
+            <input type="email" id="email" placeholder="Email" required>
+            <input type="password" id="password" placeholder="Password" required>
+            <button onclick="login()">Login</button>
+            <button onclick="register()">Register</button>
+        </div>
+        
+        <div id="attendance-section" style="display:none;">
+            <div class="header">
+                <h2>Attendance System</h2>
+                <button onclick="logout()" class="logout-btn">Logout</button>
+            </div>
+            
+            <div class="controls">
+                <input type="date" id="attendance-date" value="">
+                <select id="class-select">
+                    <option value="">Select Class</option>
+                    <option value="math101">Math 101</option>
+                    <option value="science101">Science 101</option>
+                </select>
+                <button onclick="loadStudents()">Load Students</button>
+            </div>
+            
+            <div id="student-list">
+                <!-- Student list will be populated here -->
+            </div>
+            
+            <button onclick="saveAttendance()" class="save-btn">Save Attendance</button>
+        </div>
+    </div>
 
+    <!-- All JavaScript in one place for GitHub Pages -->
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // Authentication Functions
+        function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            auth.signInWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    console.log('User signed in:', userCredential.user.email);
+                    showAttendanceSection();
+                })
+                .catch((error) => {
+                    console.error('Login error:', error.message);
+                    alert('Login failed: ' + error.message);
+                });
+        }
+
+        function register() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            auth.createUserWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    console.log('User registered:', userCredential.user.email);
+                    showAttendanceSection();
+                })
+                .catch((error) => {
+                    console.error('Registration error:', error.message);
+                    alert('Registration failed: ' + error.message);
+                });
+        }
+
+        function logout() {
+            auth.signOut()
+                .then(() => {
+                    console.log('User signed out');
+                    document.getElementById('login-section').style.display = 'block';
+                    document.getElementById('attendance-section').style.display = 'none';
+                })
+                .catch((error) => {
+                    console.error('Logout error:', error.message);
+                });
+        }
+
+        function showAttendanceSection() {
+            document.getElementById('login-section').style.display = 'none';
+            document.getElementById('attendance-section').style.display = 'block';
+            
+            // Set today's date as default
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('attendance-date').value = today;
+        }
+
+        // Attendance Functions
+        let currentStudents = [];
+
+        async function loadStudents() {
+            try {
+                const classSelect = document.getElementById('class-select');
+                const selectedClass = classSelect.value;
+                
+                if (!selectedClass) {
+                    alert('Please select a class');
+                    return;
+                }
+
+                const querySnapshot = await db.collection('students')
+                    .where('class', '==', selectedClass)
+                    .get();
+                
+                currentStudents = [];
+                const studentList = document.getElementById('student-list');
+                studentList.innerHTML = '';
+
+                querySnapshot.forEach((doc) => {
+                    const student = { id: doc.id, ...doc.data() };
+                    currentStudents.push(student);
+                    addStudentToUI(student);
+                });
+
+                console.log('Students loaded:', currentStudents.length);
+            } catch (error) {
+                console.error('Error loading students:', error);
+                alert('Error loading students: ' + error.message);
+            }
+        }
+
+        function addStudentToUI(student) {
+            const studentList = document.getElementById('student-list');
+            
+            const studentDiv = document.createElement('div');
+            studentDiv.className = 'student-item';
+            studentDiv.innerHTML = `
+                <div>
+                    <strong>${student.name}</strong>
+                    <span style="margin-left: 10px; color: #666;">${student.id}</span>
+                </div>
+                <div class="status-buttons">
+                    <button class="status-btn present" onclick="setStudentStatus('${student.id}', 'present')">Present</button>
+                    <button class="status-btn absent" onclick="setStudentStatus('${student.id}', 'absent')">Absent</button>
+                    <button class="status-btn late" onclick="setStudentStatus('${student.id}', 'late')">Late</button>
+                </div>
+            `;
+            
+            studentList.appendChild(studentDiv);
+        }
+
+        function setStudentStatus(studentId, status) {
+            // Remove previous active state
+            const buttons = document.querySelectorAll(`[onclick*="${studentId}"]`);
+            buttons.forEach(btn => btn.classList.remove('active'));
+            
+            // Find the clicked button and mark it as active
+            event.target.classList.add('active');
+            
+            // Store the status for this student
+            const student = currentStudents.find(s => s.id === studentId);
+            if (student) {
+                student.attendanceStatus = status;
+            }
+        }
+
+        async function saveAttendance() {
+            const attendanceDate = document.getElementById('attendance-date').value;
+            const classSelect = document.getElementById('class-select');
+            const selectedClass = classSelect.value;
+
+            if (!attendanceDate || !selectedClass) {
+                alert('Please select date and class');
+                return;
+            }
+
+            const attendanceRecords = currentStudents.map(student => ({
+                studentId: student.id,
+                studentName: student.name,
+                status: student.attendanceStatus || 'absent',
+                date: attendanceDate,
+                class: selectedClass,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }));
+
+            try {
+                const batch = db.batch();
+
+                attendanceRecords.forEach(record => {
+                    const attendanceRef = db.collection('attendance').doc();
+                    batch.set(attendanceRef, record);
+                });
+
+                await batch.commit();
+                alert(`Attendance saved for ${attendanceRecords.length} students!`);
+                
+                // Clear the student list after saving
+                document.getElementById('student-list').innerHTML = '';
+                currentStudents = [];
+            } catch (error) {
+                console.error('Error saving attendance:', error);
+                alert('Error saving attendance: ' + error.message);
+            }
+        }
+
+        // Main Application Logic
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if user is already logged in
+            auth.onAuthStateChanged((user) => {
+                if (user) {
+                    console.log('User is signed in:', user.email);
+                    showAttendanceSection();
+                } else {
+                    console.log('No user is signed in');
+                    document.getElementById('login-section').style.display = 'block';
+                    document.getElementById('attendance-section').style.display = 'none';
+                }
+            });
+
+            // Set default date to today
+            const today = new Date().toISOString().split('T')[0];
+            if (document.getElementById('attendance-date')) {
+                document.getElementById('attendance-date').value = today;
+            }
+        });
+
+        // Utility functions
+        function getCurrentDateTime() {
+            return new Date().toISOString();
+        }
+
+        function formatDate(dateString) {
+            const options = { year: 'numeric', month: 'short', day: 'numeric' };
+            return new Date(dateString).toLocaleDateString(undefined, options);
+        }
+    </script>
+</body>
+</html>
