@@ -354,7 +354,8 @@ async function loadAdminUsers() {
     } catch (error) {
         console.error("Error loading admin users:", error);
         document.getElementById('adminUsersContent').innerHTML = '<div class="error">Error loading data</div>';
-      
+	}
+}
 async function signInWithGoogle(role) {
   try {
       const result = await auth.signInWithPopup(googleProvider);
@@ -414,7 +415,5 @@ async function signInWithGoogle(role) {
       } else {
           alert("Error signing in with Google. Please try again.\n\nError: " + error.message);
       }
-  }
-}
   }
 }
